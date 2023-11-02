@@ -1,0 +1,14 @@
+name: scp
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+  - default
+dependencies:
+  - python=3.9
+  - h5py
+  - scipy
+  - pandas
+  - matplotlib
+  - loompy
+prefix: /Users/zacheliason/miniconda3/envs/scp
