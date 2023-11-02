@@ -2,9 +2,9 @@ import matplotlib.pyplot as plt
 import scipy.sparse as sp
 import pandas as pd
 import numpy as np
+import subprocess
 import shutil
 import h5py
-import json
 import os
 import re
 
@@ -12,7 +12,20 @@ import re
 # Assign root as the RAW data directory (the first tar unzipped directory)
 root = '/Users/zacheliason/Documents/Work/payne/GSE208253_RAW'
 
+# If the directory has a space in it, replace it with an underscore
+if " " in root:
+    subprocess.run(['mv', root, root.replace(' ', '_')], check=True)
+    root = root.replace(' ', '_')
+
+# List files
 filenames = [f for f in os.listdir(root) if os.path.isfile(os.path.join(root, f))]
+
+# Unzip files if necessary
+zipped_filenames = [f for f in filenames if f.endswith(".gz")]
+if len(zipped_filenames) > 0:
+    print("Unzipping files...")
+    subprocess.run(["gunzip", f"{root}/*.gz"], check=True)
+
 filenames = [f for f in filenames if " " not in f and not f.startswith(".")]
 filenames = sorted(list(set(filenames)))
 

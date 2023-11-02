@@ -132,7 +132,7 @@ def collapse_spot_x_3(df): # triangles
 root = '/Users/zacheliason/Documents/Work/payne/GSE208253_RAW'
 
 # parameters
-collapse_functions = [(collapse_spot_x_3, "collapse_x_3"), (collapse_spot_x_4, "collapse_x_4"), (collapse_spot_x_9, "collapse_x_9")]
+collapse_functions = [(collapse_spot_x_3, 3), (collapse_spot_x_4, 3), (collapse_spot_x_9, 9)]
 perform_matrix_scaling = False
 drop_incomplete_groupings = not perform_matrix_scaling
 
@@ -142,14 +142,20 @@ for tissue_id in ids:
 	base_file_name = f"processed_{tissue_id}_matrix.csv"
 	matrix_path = os.path.join(root, tissue_id, base_file_name)
 
-	for collapse, suffix in collapse_functions:
-		processed_matrix_path = os.path.join(root, tissue_id, base_file_name.replace(".csv", f"_{suffix}.csv"))
+	for collapse, grouping_factor in collapse_functions:
+		simulated_matrix_path = os.path.join(root, tissue_id, 'simulated_matrices', base_file_name.replace(".csv", f"_collapsed_x_{grouping_factor}.csv").replace("processed_", ""))
+		simulated_loc_path = os.path.join(root, tissue_id, 'simulated_matrices', f"{tissue_id}_spot_positions_collapsed_x_{grouping_factor}.csv")
+		if not os.path.exists(os.path.dirname(simulated_matrix_path)):
+			os.makedirs(os.path.dirname(simulated_matrix_path))
 
 		loc_df = pd.read_csv(spot_positions_csv_path)
 		loc_df = collapse(loc_df)
+		loc_df.to_csv(simulated_loc_path, index=False)
+		loc_df = loc_df[loc_df['in_tissue'] == 1]
 
-		# plt.scatter(loc_df['array_row'], loc_df['array_col'], s=5, c=loc_df['grouping'] % 5, cmap=plt.cm.coolwarm)
-		# plt.show()
+		plt.scatter(loc_df['array_row'], loc_df['array_col'], s=5, c=loc_df['grouping'] % (2 * grouping_factor) + 1, cmap=plt.cm.coolwarm)
+		plt.savefig(os.path.join(root, tissue_id, 'simulated_matrices', f"{tissue_id}_collapsed_x_{grouping_factor}.png"))
+		plt.close()
 
 		loc_df = loc_df[['barcode', 'grouping']]
 
@@ -196,5 +202,5 @@ for tissue_id in ids:
 		# format index groupings for output
 		matrix['groupings'] = matrix.index
 		matrix = matrix.reset_index(drop=True)[['groupings'] + matrix.columns[:-1].tolist()]
-		matrix.to_csv(processed_matrix_path, index=False)
-		print(f"Saved processed matrix to {processed_matrix_path}")
+		matrix.to_csv(simulated_matrix_path, index=False)
+		print(f"Saved simulated matrix to {simulated_matrix_path}")

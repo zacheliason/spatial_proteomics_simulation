@@ -14,9 +14,9 @@ cd scp
 ```
 
 ## Environment Setup
-1. Navigate to the directory containing the YAML file for the Conda environment (myenv.yml).
+1. Navigate to the directory containing the YAML file for the Conda environment (scp_envv.yml).
 2. Open your command prompt or terminal and execute the following command to create and activate the Conda environment from the YAML file:
 ```bash
-conda env create -f myenv.yml
+conda env create -f scp_env.yml
 conda activate scp
 ```
