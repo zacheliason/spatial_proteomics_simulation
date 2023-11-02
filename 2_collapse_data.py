@@ -37,9 +37,11 @@ def collapse_spot_x_9(df): # large squares
 		df.loc[(df['array_row'] == x+1) & (df['array_col'] == y-1), 'corners'] = c
 		df.loc[(df['array_row'] == x+2) & (df['array_col'] == y), 'corners'] = c
 
-	df = df.rename(columns={'corners': 'grouping'})
-	df['in_tissue'] = df.groupby('grouping')['in_tissue'].transform('max')
-	df = df[df['grouping'] > 0]
+	# df = df.rename(columns={'corners': 'grouping'})
+	df['grouping'] = df['corners'].astype(str) + "x9"
+
+	df['in_tissue'] = df.groupby('corners')['in_tissue'].transform('max')
+	df = df[df['corners'] > 0]
 	return df
 
 
@@ -72,9 +74,11 @@ def collapse_spot_x_4(df): # small squares
 		df.loc[(df['array_row'] == x + 1) & (df['array_col'] == y - 1), 'corners'] = c
 		df.loc[(df['array_row'] == x - 1) & (df['array_col'] == y - 1), 'corners'] = c
 
-	df = df.rename(columns={'corners': 'grouping'})
-	df['in_tissue'] = df.groupby('grouping')['in_tissue'].transform('max')
-	df = df[df['grouping'] > 0]
+	# df = df.rename(columns={'corners': 'grouping'})
+	df['grouping'] = df['corners'].astype(str) + "x4"
+
+	df['in_tissue'] = df.groupby('corners')['in_tissue'].transform('max')
+	df = df[df['corners'] > 0]
 	return df
 
 
@@ -124,15 +128,17 @@ def collapse_spot_x_3(df): # triangles
 				df.loc[(df['array_row'] == x + 1) & (df['array_col'] == y - 1), 'corners'] = c
 				df.loc[(df['array_row'] == x - 1) & (df['array_col'] == y - 1), 'corners'] = c
 
-	df = df.rename(columns={'corners': 'grouping'})
-	df['in_tissue'] = df.groupby('grouping')['in_tissue'].transform('max')
-	df = df[df['grouping'] > 0]
+	# df = df.rename(columns={'corners': 'grouping'})
+	df['grouping'] = df['corners'].astype(str) + "x3"
+
+	df['in_tissue'] = df.groupby('corners')['in_tissue'].transform('max')
+	df = df[df['corners'] > 0]
 	return df
 
 root = '/Users/zacheliason/Documents/Work/payne/GSE208253_RAW'
 
 # parameters
-collapse_functions = [(collapse_spot_x_3, 3), (collapse_spot_x_4, 3), (collapse_spot_x_9, 9)]
+collapse_functions = [(collapse_spot_x_3, 3), (collapse_spot_x_4, 4), (collapse_spot_x_9, 9)]
 perform_matrix_scaling = False
 drop_incomplete_groupings = not perform_matrix_scaling
 
@@ -142,18 +148,34 @@ for tissue_id in ids:
 	base_file_name = f"processed_{tissue_id}_matrix.csv"
 	matrix_path = os.path.join(root, tissue_id, base_file_name)
 
+	spot_positions_df = pd.read_csv(spot_positions_csv_path)
+
 	for collapse, grouping_factor in collapse_functions:
 		simulated_matrix_path = os.path.join(root, tissue_id, 'simulated_matrices', base_file_name.replace(".csv", f"_collapsed_x_{grouping_factor}.csv").replace("processed_", ""))
 		simulated_loc_path = os.path.join(root, tissue_id, 'simulated_matrices', f"{tissue_id}_spot_positions_collapsed_x_{grouping_factor}.csv")
 		if not os.path.exists(os.path.dirname(simulated_matrix_path)):
 			os.makedirs(os.path.dirname(simulated_matrix_path))
 
-		loc_df = pd.read_csv(spot_positions_csv_path)
+		loc_df = spot_positions_df.copy()
 		loc_df = collapse(loc_df)
+		# create new_x which is average of array_row for each grouping
+		loc_df['centroid_row'] = loc_df.groupby('grouping')['array_row'].transform('mean')
+		loc_df['centroid_col'] = loc_df.groupby('grouping')['array_col'].transform('mean')
+		loc_df = loc_df.sort_values(by=['centroid_row', 'centroid_col'])
+
 		loc_df.to_csv(simulated_loc_path, index=False)
 		loc_df = loc_df[loc_df['in_tissue'] == 1]
 
-		plt.scatter(loc_df['array_row'], loc_df['array_col'], s=5, c=loc_df['grouping'] % (2 * grouping_factor) + 1, cmap=plt.cm.coolwarm)
+		# plot the groupings
+		x_dim = 5
+		y_dim = loc_df['array_col'].max() / loc_df['array_row'].max() * x_dim
+
+		plt.figure(figsize=(x_dim, y_dim))
+		plt.scatter(loc_df['array_row'], loc_df['array_col'], s=2, c=loc_df['corners'] % 8, cmap=plt.cm.coolwarm)
+		plt.scatter(loc_df['centroid_row'], loc_df['centroid_col'], s=4, c="black", label="New Grouping Center")
+		for i, r in loc_df.iterrows():
+			plt.plot([r['centroid_row'], r['array_row']], [r['centroid_col'], r['array_col']], c='black', alpha=.5, linewidth=.7)
+
 		plt.savefig(os.path.join(root, tissue_id, 'simulated_matrices', f"{tissue_id}_collapsed_x_{grouping_factor}.png"))
 		plt.close()
 
@@ -203,4 +225,4 @@ for tissue_id in ids:
 		matrix['groupings'] = matrix.index
 		matrix = matrix.reset_index(drop=True)[['groupings'] + matrix.columns[:-1].tolist()]
 		matrix.to_csv(simulated_matrix_path, index=False)
-		print(f"Saved simulated matrix to {simulated_matrix_path}")
+		print(f"Saved simulated x {grouping_factor} matrix to {simulated_matrix_path}")
