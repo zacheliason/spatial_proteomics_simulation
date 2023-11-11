@@ -1,12 +1,15 @@
+from matplotlib.patches import Polygon
 from matplotlib import pyplot as plt
+from scipy.spatial import ConvexHull
 from itertools import count
 import pandas as pd
 import numpy as np
+import glob
 import os
 
 
 # Collapse spots into larger groupings of 9 spots
-def collapse_spot_x_9(df): # large squares
+def collapse_spot_x_9(df, drop_incomplete_pairings=True): # large squares
 	def identify_corners(row, counter):
 		x = row['array_row']
 		y = row['array_col']
@@ -40,13 +43,15 @@ def collapse_spot_x_9(df): # large squares
 	# df = df.rename(columns={'corners': 'grouping'})
 	df['grouping'] = df['corners'].astype(str) + "x9"
 
-	df['in_tissue'] = df.groupby('corners')['in_tissue'].transform('max')
+	if drop_incomplete_pairings:
+		df['in_tissue'] = df.groupby('corners')['in_tissue'].transform('min')
+
 	df = df[df['corners'] > 0]
 	return df
 
 
 # Collapse spots into larger groupings of 4 spots
-def collapse_spot_x_4(df): # small squares
+def collapse_spot_x_4(df, drop_incomplete_pairings=True): # small squares
 	def identify_corners(row, counter):
 		x = row['array_row']
 		y = row['array_col']
@@ -77,13 +82,14 @@ def collapse_spot_x_4(df): # small squares
 	# df = df.rename(columns={'corners': 'grouping'})
 	df['grouping'] = df['corners'].astype(str) + "x4"
 
-	df['in_tissue'] = df.groupby('corners')['in_tissue'].transform('max')
+	if drop_incomplete_pairings:
+		df['in_tissue'] = df.groupby('corners')['in_tissue'].transform('min')
 	df = df[df['corners'] > 0]
 	return df
 
 
 # Collapse spots into larger groupings of 3 spots
-def collapse_spot_x_3(df): # triangles
+def collapse_spot_x_3(df, drop_incomplete_pairings=True): # triangles
 	def identify_corners(row, counter):
 		x = row['array_row']
 		y = row['array_col']
@@ -131,7 +137,8 @@ def collapse_spot_x_3(df): # triangles
 	# df = df.rename(columns={'corners': 'grouping'})
 	df['grouping'] = df['corners'].astype(str) + "x3"
 
-	df['in_tissue'] = df.groupby('corners')['in_tissue'].transform('max')
+	if drop_incomplete_pairings:
+		df['in_tissue'] = df.groupby('corners')['in_tissue'].transform('min')
 	df = df[df['corners'] > 0]
 	return df
 
@@ -139,10 +146,11 @@ root = '/Users/zacheliason/Documents/Work/payne/GSE208253_RAW'
 
 # parameters
 collapse_functions = [(collapse_spot_x_3, 3), (collapse_spot_x_4, 4), (collapse_spot_x_9, 9)]
-perform_matrix_scaling = False
-drop_incomplete_groupings = not perform_matrix_scaling
+drop_incomplete_groupings = True
+perform_matrix_scaling = not drop_incomplete_groupings
 
 ids = [f for f in os.listdir(root) if os.path.isdir(os.path.join(root, f))]
+
 for tissue_id in ids:
 	spot_positions_csv_path = os.path.join(root, tissue_id, f"processed_{tissue_id}_spot_positions.csv")
 	base_file_name = f"processed_{tissue_id}_matrix.csv"
@@ -166,17 +174,36 @@ for tissue_id in ids:
 		loc_df.to_csv(simulated_loc_path, index=False)
 		loc_df = loc_df[loc_df['in_tissue'] == 1]
 
+		loc_df['pathologist_annotation'] = loc_df['pathologist_annotation'].fillna("No annotation")
+		# loc_df['cluster_annotation'] = loc_df['pathologist_annotation'].fillna("None")
+
 		# plot the groupings
 		x_dim = 5
-		y_dim = loc_df['array_col'].max() / loc_df['array_row'].max() * x_dim
+		y_dim = (loc_df['array_col'].max() / loc_df['array_row'].max() * x_dim) + 1.5
 
 		plt.figure(figsize=(x_dim, y_dim))
-		plt.scatter(loc_df['array_row'], loc_df['array_col'], s=2, c=loc_df['corners'] % 8, cmap=plt.cm.coolwarm)
-		plt.scatter(loc_df['centroid_row'], loc_df['centroid_col'], s=4, c="black", label="New Grouping Center")
-		for i, r in loc_df.iterrows():
-			plt.plot([r['centroid_row'], r['array_row']], [r['centroid_col'], r['array_col']], c='black', alpha=.5, linewidth=.7)
+		fig, ax = plt.subplots()
 
-		plt.savefig(os.path.join(root, tissue_id, 'simulated_matrices', f"{tissue_id}_collapsed_x_{grouping_factor}.png"))
+		plt.legend()
+		for grouping in loc_df['grouping'].unique():
+			grouping_df = loc_df[loc_df['grouping'] == grouping].reset_index(drop=True)
+			if len(grouping_df) < 3:
+				continue
+
+			hull = ConvexHull(grouping_df[['array_row', 'array_col']])
+			hull_vertices = grouping_df.iloc[hull.vertices][['array_row', 'array_col']].to_numpy()
+
+			polygon = Polygon(xy=hull_vertices, closed=True, facecolor='black', edgecolor='black', alpha=.4)
+			ax.add_patch(polygon)
+
+		cmap = plt.get_cmap('tab10')
+		for annotation, color in zip(loc_df['pathologist_annotation'].unique(), cmap.colors):
+			category_data = loc_df[loc_df['pathologist_annotation'] == annotation]
+			plt.scatter(category_data['array_row'], category_data['array_col'], s=4, c=color, label=annotation)
+
+		ax.legend(loc='upper center', bbox_to_anchor=(0.5, -0.1), fancybox=True, shadow=False)
+
+		plt.savefig(os.path.join(root, tissue_id, 'simulated_matrices', f"{tissue_id}_collapsed_x_{grouping_factor}.png"), bbox_inches='tight', dpi=300)
 		plt.close()
 
 		loc_df = loc_df[['barcode', 'grouping']]
@@ -222,7 +249,7 @@ for tissue_id in ids:
 			matrix = scaled_matrix_reset
 
 		# format index groupings for output
-		matrix['groupings'] = matrix.index
-		matrix = matrix.reset_index(drop=True)[['groupings'] + matrix.columns[:-1].tolist()]
+		matrix['grouping'] = matrix.index
+		matrix = matrix.reset_index(drop=True)[['grouping'] + matrix.columns[:-1].tolist()]
 		matrix.to_csv(simulated_matrix_path, index=False)
 		print(f"Saved simulated x {grouping_factor} matrix to {simulated_matrix_path}")

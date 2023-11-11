@@ -9,54 +9,28 @@ import os
 import re
 
 
-# Assign root as the RAW data directory (the first tar unzipped directory)
 root = '/Users/zacheliason/Documents/Work/payne/GSE208253_RAW'
+pathologist_annotation_root = '/Users/zacheliason/Documents/Work/payne/20304456'
 
-# If the directory has a space in it, replace it with an underscore
-if " " in root:
-    subprocess.run(['mv', root, root.replace(' ', '_')], check=True)
-    root = root.replace(' ', '_')
-
-# List files
-filenames = [f for f in os.listdir(root) if os.path.isfile(os.path.join(root, f))]
-
-# Unzip files if necessary
-zipped_filenames = [f for f in filenames if f.endswith(".gz")]
-if len(zipped_filenames) > 0:
-    print("Unzipping files...")
-    subprocess.run(["gunzip", f"{root}/*.gz"], check=True)
-
-filenames = [f for f in filenames if " " not in f and not f.startswith(".")]
-filenames = sorted(list(set(filenames)))
-
-# Organizes files into directories based on the tissue_id if they haven't been already
-if len(filenames) != 0:
-    ids = []
-    pattern = r"([\dA-Z]+_s\d+)_.*"
-    for filename in filenames:
-        match = re.match(pattern, filename)
-        if match:
-            id = match.group(1)
-            ids.append(id)
-            id_directory = os.path.join(root, id)
-
-            if not os.path.exists(id_directory):
-                os.mkdir(id_directory)
-
-            shutil.move(os.path.join(root, filename), os.path.join(id_directory, filename))
-
-# If files have already been organized, just get the ids from pre-existing directories
-else:
-    ids = [f for f in os.listdir(root) if os.path.isdir(os.path.join(root, f))]
+ids = [f for f in os.listdir(root) if os.path.isdir(os.path.join(root, f))]
 
 # Process files for each tissue
 for tissue_id in ids:
+    # Access spot annotations
+    tissue_number = tissue_id.split("_s")[1]
+    annotations_csv_path = os.path.join(pathologist_annotation_root, f'sample_{tissue_number}_pathologist_annotations.csv')
+    annotations_df = pd.read_csv(annotations_csv_path)
+
     # Process/save the spot positions list
     spot_positions_csv_path = os.path.join(root, tissue_id, f"{tissue_id}_tissue_positions_list.csv")
     spot_positions = pd.read_csv(spot_positions_csv_path, header=None)
 
     # These headers come from documentation in https://support.10xgenomics.com/spatial-gene-expression/software/pipelines/latest/output/spatial
     spot_positions.columns = ['barcode', 'in_tissue', 'array_row', 'array_col', 'pxl_row_in_fullres', 'pxl_col_in_fullres']
+
+    # Add annotations
+    spot_positions = spot_positions.merge(annotations_df, on='barcode', how='left')
+
     spot_positions.to_csv(os.path.join(root, tissue_id, f"processed_{tissue_id}_spot_positions.csv"), index=False)
 
     try:
