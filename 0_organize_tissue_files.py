@@ -5,7 +5,7 @@ import os
 
 
 # Assign root as the RAW data directory (the first tar unzipped directory)
-root = '/Users/zacheliason/Documents/Work/payne/GSE208253_RAW'
+root = '/Users/zacheliason/Documents/Work/payne/hallmarks/data_hallmarks'
 
 # If the directory has a space in it, replace it with an underscore
 if " " in root:
